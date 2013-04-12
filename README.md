@@ -1,0 +1,4 @@
+githooks
+========
+
+Assorted git hooks
