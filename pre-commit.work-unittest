@@ -1,0 +1,101 @@
+#!/bin/bash
+
+# brief Git unit test pre-commit hook
+#
+# This pre-commit hook requires that each cpp and hpp file that is to
+# be committed has a corresponding unit test, which must pass in order for
+# the commit to be accepted.
+
+
+# Determine the previous commit
+function get_previous_commit()
+{
+  # Determine previous commit (from pre-commit.sample)
+  if git rev-parse --verify HEAD >/dev/null 2>&1
+  then
+          AGAINST=HEAD
+  else
+          # Initial commit: diff against an empty tree object
+          AGAINST=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+  fi
+}
+
+
+# Display the error message given in $@ and exit with error code.
+function error()
+{
+  echo "error: $@"
+  exit 1
+}
+
+
+# Attempt to build and run the unit test log passed in $1
+# PWD must be the parent folder of the corresponding unit
+# test's folder (i.e. the folder containing the test folder).
+# If the test suite does not pass, the commit will be rejected.
+function run_test()
+{
+  echo "    make NO_OPTIMIZATION=y test/.out/$1"
+  test -f test/.out/$1 || error "$1: test failed to build"
+  egrep 'OK\([0-9][0-9]*\)' test/.out/$1 >/dev/null || error "$1: test fails"
+}
+
+
+# pushd to the folder of the unit named in $1, and run its unit test.
+function verify_unit_commit()
+{
+  # .. pushd to the folder containing the file..
+  pushd `dirname $1` >/dev/null || error "`dirname $1`: no such directory"
+  # .. construct the expected unit test log file name..
+  TEST_LOG=`basename $1 | sed -e 's/\.[ch]pp/Test\.log/'`
+  # .. and attempt to build it (i.e. build and run the unit test)..
+  run_test $TEST_LOG
+  popd >/dev/null
+}
+
+
+# pushd to the parent folder of the unit test named in $1, and run the test.
+function verify_test_commit()
+{
+  # .. pushd to the test folders parent folder..
+  pushd `dirname $1`/.. >/dev/null || error "`dirname $1`: no such directory"
+  # .. construct the expected unit test log file name..
+  TEST_LOG=`basename $1 | sed -e 's/\.hpp/\.cpp/' | sed -e 's/\.cpp/\.log/'`
+  # ..and attempt to build it (i.e. build and run the unit test)..
+  run_test $TEST_LOG
+  popd >/dev/null
+}
+
+
+
+get_previous_commit
+
+
+# Stash any changes before we start, making sure that we operate
+# only on the files to be committed.
+git stash -q --keep-index
+
+# restore work area upon exit
+trap "git stash pop -q" EXIT
+
+# Get a list of the modified files
+MODIFIED=`git diff --cached --name-only $AGAINST`
+
+# Loop through the modified files
+for FILE in $MODIFIED
+do
+  # If the file exists, and is a cpp or hpp file..
+  if [[ -f "$FILE" && "$FILE" =~ \.?pp ]]
+  then
+    # .. and the file is not a stub file or unit test file..
+    if [[ ! "$FILE" =~ Test\.[ch]pp && ! "$FILE" =~ [Ss]tub\.[ch]pp \
+      && ! "$FILE" =~ [Ss]tubs ]]
+    then
+      verify_unit_commit $FILE
+    # .. otherwise, if we're checking in a unit test..
+    elif [[ "$FILE" =~ Test\.[ch]pp ]]
+    then
+      verify_test_commit $FILE
+    fi
+  fi
+done
