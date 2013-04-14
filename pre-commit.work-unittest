@@ -87,15 +87,21 @@ do
   # If the file exists, and is a cpp or hpp file..
   if [[ -f "$FILE" && "$FILE" =~ \.?pp ]]
   then
-    # .. and the file is not a stub file or unit test file..
-    if [[ ! "$FILE" =~ Test\.[ch]pp && ! "$FILE" =~ [Ss]tub\.[ch]pp \
-      && ! "$FILE" =~ [Ss]tubs ]]
+    # .. and the source file resides in a part of the tree that is
+    # to be tested
+    if [[ "$FILE" =~ CBR3/ || "$FILE" =~ CBI3/ \
+      || "$FILE" =~ ILA_[A-Z_]*/ || "$FILE" =~ RBA_[A-Z_]*/ ]]
     then
-      verify_unit_commit $FILE
-    # .. otherwise, if we're checking in a unit test..
-    elif [[ "$FILE" =~ Test\.[ch]pp ]]
-    then
-      verify_test_commit $FILE
+      # .. and the file is not a stub file or unit test file..
+      if [[ ! "$FILE" =~ Test\.[ch]pp && ! "$FILE" =~ [Ss]tub\.[ch]pp \
+        && ! "$FILE" =~ [Ss]tubs ]]
+      then
+        verify_unit_commit $FILE
+      # .. otherwise, if we're checking in a unit test..
+      elif [[ "$FILE" =~ Test\.[ch]pp ]]
+      then
+        verify_test_commit $FILE
+      fi
     fi
   fi
 done
